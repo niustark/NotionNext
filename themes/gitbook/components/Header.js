@@ -1,4 +1,5 @@
 import Collapse from '@/components/Collapse'
+import DarkModeButton from '@/components/DarkModeButton'
 import { siteConfig } from '@/lib/config'
 import { useGlobal } from '@/lib/global'
 import { useRef, useState } from 'react'
@@ -8,11 +9,11 @@ import { MenuBarMobile } from './MenuBarMobile'
 import { MenuItemDrop } from './MenuItemDrop'
 
 /**
- * 顶部导航栏 + 菜单
+ * 页头：顶部导航栏 + 菜单
  * @param {} param0
  * @returns
  */
-export default function TopNavBar(props) {
+export default function Header(props) {
   const { className, customNav, customMenu } = props
   const [isOpen, changeShow] = useState(false)
   const collapseRef = useRef(null)
@@ -24,25 +25,25 @@ export default function TopNavBar(props) {
       icon: 'fas fa-th',
       name: locale.COMMON.CATEGORY,
       href: '/category',
-      show: siteConfig('MEDIUM_MENU_CATEGORY', null, CONFIG)
+      show: siteConfig('GITBOOK_MENU_CATEGORY', null, CONFIG)
     },
     {
       icon: 'fas fa-tag',
       name: locale.COMMON.TAGS,
       href: '/tag',
-      show: siteConfig('MEDIUM_MENU_TAG', null, CONFIG)
+      show: siteConfig('GITBOOK_BOOK_MENU_TAG', null, CONFIG)
     },
     {
       icon: 'fas fa-archive',
       name: locale.NAV.ARCHIVE,
       href: '/archive',
-      show: siteConfig('MEDIUM_MENU_ARCHIVE', null, CONFIG)
+      show: siteConfig('GITBOOK_MENU_ARCHIVE', null, CONFIG)
     },
     {
       icon: 'fas fa-search',
       name: locale.NAV.SEARCH,
       href: '/search',
-      show: siteConfig('MEDIUM_MENU_SEARCH', null, CONFIG)
+      show: siteConfig('GITBOOK_MENU_SEARCH', null, CONFIG)
     }
   ]
 
@@ -57,14 +58,8 @@ export default function TopNavBar(props) {
     links = customMenu
   }
 
-  if (!links || links.length === 0) {
-    return null
-  }
-
   return (
-    <div
-      id='top-nav'
-      className={'sticky top-0 lg:relative w-full z-40 ' + className}>
+    <div id='top-nav' className={'fixed top-0 w-full z-20 ' + className}>
       {/* 移动端折叠菜单 */}
       <Collapse
         type='vertical'
@@ -82,17 +77,20 @@ export default function TopNavBar(props) {
       </Collapse>
 
       {/* 导航栏菜单 */}
-      <div className='flex w-full h-12 shadow bg-white dark:bg-hexo-black-gray px-7 items-between'>
+      <div className='flex w-full h-14 shadow glassmorphism bg-white dark:bg-hexo-black-gray px-7 items-between'>
         {/* 左侧图标Logo */}
         <LogoBar {...props} />
 
         {/* 折叠按钮、仅移动端显示 */}
-        <div className='mr-1 flex md:hidden justify-end items-center text-sm space-x-4 font-serif dark:text-gray-200'>
-          <div onClick={toggleMenuOpen} className='cursor-pointer'>
+        <div className='mr-1 flex md:hidden justify-end items-center space-x-4  dark:text-gray-200'>
+          <DarkModeButton className='flex text-md items-center h-full' />
+          <div
+            onClick={toggleMenuOpen}
+            className='cursor-pointer text-lg hover:scale-110 duration-150'>
             {isOpen ? (
               <i className='fas fa-times' />
             ) : (
-              <i className='fas fa-bars' />
+              <i className='fa-solid fa-ellipsis-vertical' />
             )}
           </div>
         </div>
@@ -103,6 +101,7 @@ export default function TopNavBar(props) {
             links?.map((link, index) => (
               <MenuItemDrop key={index} link={link} />
             ))}
+          <DarkModeButton className='text-sm flex items-center h-full' />
         </div>
       </div>
     </div>
