@@ -25,6 +25,8 @@ const CONFIG = {
   HEO_HERO_TITLE_4: '',
   HEO_HERO_TITLE_5: '',
   HEO_HERO_TITLE_LINK: 'https://zlibrary-hk.se',
+  // 英雄区遮罩文字
+  HEO_HERO_COVER_TITLE: '随便逛逛',
 
   // 英雄区显示三个置顶分类
   HEO_HERO_CATEGORY_1: { title: '效率', url: '/tag/效率' },
