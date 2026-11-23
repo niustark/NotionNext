@@ -1,0 +1,129 @@
+name: 上游更新检测
+
+# 每天 UTC 01:00（北京时间 09:00）检测一次 fork 是否落后上游，落后则推送 PushPlus 通知
+on:
+  schedule:
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: 对比 fork 与上游
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检测 behind_by 并在有更新时推送
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          UPSTREAM_REPO: notionnext-org/NotionNext
+          FORK_REPO: niustark/NotionNext
+        run: |
+          python3 - <<'PY'
+          import html
+          import json
+          import os
+          import sys
+          import time
+          import urllib.error
+          import urllib.request
+
+          upstream = os.environ["UPSTREAM_REPO"]
+          fork = os.environ["FORK_REPO"]
+          token = os.environ.get("GH_TOKEN", "")
+          pushplus = os.environ.get("PUSHPLUS_TOKEN", "").strip()
+
+          def gh(url, attempts=2):
+              """调用 GitHub API，失败重试一次"""
+              last = None
+              for i in range(attempts):
+                  req = urllib.request.Request(url)
+                  req.add_header("Accept", "application/vnd.github+json")
+                  req.add_header("User-Agent", "upstream-sync-check")
+                  if token:
+                      req.add_header("Authorization", f"Bearer {token}")
+                  try:
+                      with urllib.request.urlopen(req, timeout=30) as r:
+                          return json.loads(r.read().decode("utf-8"))
+                  except urllib.error.HTTPError as e:
+                      last = f"HTTP {e.code}: {e.read()[:200].decode('utf-8', 'ignore')}"
+                  except Exception as e:
+                      last = repr(e)
+                  if i + 1 < attempts:
+                      time.sleep(5)
+              print(f"[警告] 请求失败 {url} → {last}", file=sys.stderr)
+              return None
+
+          cmp_ = gh(f"https://api.github.com/repos/{upstream}/compare/main...{fork.split('/')[0]}:main")
+          if cmp_ is None:
+              print("[结束] GitHub API 调用失败（已重试一次），本次不发送通知")
+              sys.exit(0)
+
+          behind = cmp_.get("behind_by", 0) or 0
+          ahead = cmp_.get("ahead_by", 0) or 0
+          print(f"[结果] status={cmp_.get('status')} behind_by={behind} ahead_by={ahead}")
+
+          if behind == 0:
+              print("[结束] 上游无新提交，不发送通知")
+              sys.exit(0)
+
+          # 该方向 commits 只含 fork 领先的提交，需反向比较取上游新提交
+          rev = gh(f"https://api.github.com/repos/{upstream}/compare/{fork.split('/')[0]}:main...main")
+          commits = (rev or {}).get("commits", [])
+          if not commits:
+              print("[提示] 反向比较未取到提交明细，通知中仅给出数量")
+
+          items = []
+          for c in commits:
+              sha = c.get("sha", "")[:7]
+              date = (c.get("commit", {}).get("author") or {}).get("date", "")[:10]
+              msg = (c.get("commit", {}).get("message", "") or "").splitlines()[0]
+              url = f"https://github.com/{fork}/commit/{c.get('sha', '')}"
+              items.append(
+                  f'<li><a href="{url}">{html.escape(sha)}</a> - {html.escape(date)} - {html.escape(msg)}</li>'
+              )
+
+          fork_url = f"https://github.com/{fork}"
+          content = (
+              f"<p>你的 fork <b>{fork}</b> 落后上游 {upstream} 共 <b>{behind}</b> 个提交：</p>"
+              f"<ul>{''.join(items)}</ul>"
+              f'<p>你仓库的提交列表：<a href="{fork_url}/commits/main">点此查看</a><br>'
+              f'如需同步，打开 <a href="{fork_url}">你的 fork</a> 页面点击 Sync fork。</p>'
+          )
+
+          if not pushplus:
+              print("[失败] 缺少 PUSHPLUS_TOKEN secret，无法发送通知", file=sys.stderr)
+              sys.exit(1)
+
+          payload = json.dumps({
+              "token": pushplus,
+              "title": f"NotionNext 上游有 {behind} 个新提交",
+              "template": "html",
+              "content": content,
+          }, ensure_ascii=False).encode("utf-8")
+
+          req = urllib.request.Request(
+              "https://www.pushplus.plus/send",
+              data=payload,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  resp = json.loads(r.read().decode("utf-8"))
+          except Exception as e:
+              print(f"[失败] PushPlus 请求异常：{e!r}", file=sys.stderr)
+              sys.exit(1)
+
+          print(f"[PushPlus] {json.dumps(resp, ensure_ascii=False)}")
+          if resp.get("code") != 200:
+              print("[失败] 推送未成功", file=sys.stderr)
+              sys.exit(1)
+          print("[成功] 通知已发送")
+          PY
